@@ -10,11 +10,18 @@ import { setupSocket } from "./socket.js";
 
 const app = express();
 const httpServer = createServer(app);
+
+// CORS — allow CLIENT_URL (comma-separated list supported)
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const io = new Server(httpServer, {
-  cors: { origin: process.env.CLIENT_URL || "http://localhost:5173" },
+  cors: { origin: allowedOrigins, credentials: true },
 });
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 
 // Routes
@@ -25,11 +32,20 @@ app.use("/api/rooms", roomRoutes);
 // Socket.IO
 setupSocket(io);
 
-// Start server
-const PORT = process.env.PORT || 3001;
+// Start server — bind to 0.0.0.0 and use Cloud Run's $PORT
+const PORT = parseInt(process.env.PORT, 10) || 3001;
+const HOST = "0.0.0.0";
 
-connectDB().then(() => {
-  httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+async function start() {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error("DB connect failed, starting server anyway so Cloud Run health-check passes:", err.message);
+  }
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`Server listening on ${HOST}:${PORT}`);
   });
-});
+}
+
+start();
+

@@ -3,12 +3,12 @@
 # ---------- Base ----------
 FROM node:20-alpine AS base
 WORKDIR /app
-ENV NODE_ENV=production
 
-# ---------- Dependencies ----------
+# ---------- Dependencies (prod only) ----------
 FROM base AS deps
+ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
 # ---------- Development ----------
 FROM base AS dev
@@ -19,10 +19,13 @@ COPY . .
 EXPOSE 3001
 CMD ["node", "--watch", "src/index.js"]
 
-# ---------- Production ----------
+# ---------- Production (Cloud Run ready) ----------
 FROM base AS prod
+ENV NODE_ENV=production
+ENV PORT=8080
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-EXPOSE 3001
+COPY package*.json ./
+COPY src ./src
+EXPOSE 8080
 USER node
 CMD ["node", "src/index.js"]

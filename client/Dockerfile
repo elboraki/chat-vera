@@ -24,9 +24,17 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-# ---------- Production (nginx) ----------
+# ---------- Production (nginx, Cloud Run ready) ----------
 FROM nginx:alpine AS prod
+RUN apk add --no-cache gettext
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint.d/40-render-config.sh
+RUN chmod +x /docker-entrypoint.d/40-render-config.sh \
+ && rm /etc/nginx/conf.d/default.conf
+ENV PORT=8080
+EXPOSE 8080
+# The base nginx image's entrypoint runs everything in /docker-entrypoint.d/
+# then execs nginx. Our 40-render-config.sh exec's nginx itself with the
+# rendered config — so we override CMD to a no-op safety just in case.
 CMD ["nginx", "-g", "daemon off;"]
