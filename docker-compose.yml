@@ -1,0 +1,78 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: chat-mongo
+    restart: unless-stopped
+    # Expose to host only if you want to connect a local Mongo client.
+    # ports:
+    #   - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chat-net
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: chat-app-server:dev
+    container_name: chat-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://mongo:27017/chat-app
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      CLIENT_URL: http://localhost:5173
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - server-node-modules:/app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - chat-net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: dev
+    image: chat-app-client:dev
+    container_name: chat-client
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://server:3001
+    volumes:
+      - ./client/src:/app/src
+      - ./client/public:/app/public
+      - ./client/index.html:/app/index.html
+      - ./client/vite.config.js:/app/vite.config.js
+      - ./client/package.json:/app/package.json
+      - ./client/package-lock.json:/app/package-lock.json
+      - client-node-modules:/app/node_modules
+    depends_on:
+      - server
+    networks:
+      - chat-net
+
+volumes:
+  mongo-data:
+  server-node-modules:
+  client-node-modules:
+
+networks:
+  chat-net:
+    driver: bridge

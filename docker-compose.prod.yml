@@ -1,0 +1,56 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: chat-mongo-prod
+    restart: unless-stopped
+    volumes:
+      - mongo-data-prod:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chat-net
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    image: chat-app-server:prod
+    container_name: chat-server-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      MONGODB_URI: mongodb://mongo:27017/chat-app
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - chat-net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: prod
+    image: chat-app-client:prod
+    container_name: chat-client-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - chat-net
+
+volumes:
+  mongo-data-prod:
+
+networks:
+  chat-net:
+    driver: bridge
